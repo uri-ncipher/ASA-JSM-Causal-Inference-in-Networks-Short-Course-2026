@@ -1,16 +1,24 @@
 ---
 title: 'Networks and Causal Inference Short Course: Part 3'
-author: "TingFang Lee, Ashley Buchanan, URI Avenir Team"
-date: "2026-04-30"
+author: "TingFang Lee, Ashley Buchanan, URI NCIPHER Team"
+date: "2026-08-03"
 output:
   pdf_document: default
   html_document:
     df_print: paged
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE
+)
+```
+
 ### Using Data from the Transmission Reduction Intervention Project in Athens, Greece {.unnumbered}
 
-\### Download the data and load it into R Studio
+### Download the data and load it into R Studio
 
 This is a simulated toy dataset made for this course. It is based on data collected from the Transmission Reduction Intervention Project in Athens Greece. Public data here: <https://www.icpsr.umich.edu/web/NAHDAP/studies/39059/versions/V2/staff>
 
@@ -35,27 +43,20 @@ library(knitr)
 library(kableExtra)
 library(ggplot2)
 library(forcats)
+library(glmerGOF)
 rm(list = ls())
 
 
 if ("package:sna" %in% search()) {
   detach("package:sna", unload = TRUE)
-}   # sna package is used in part 2, but it will mess up with igraph function in part 3, so I unload it here.
+}   # sna package is used in part 2, but it will mess up 
+    # with igraph function in part 3, so we need to unload it here.
 
-no_cores <- detectCores() - 1  
-registerDoParallel(cores=no_cores)  
-
-
-#source("https://github.com/uri-ncipher/Nearest-Neighbor-estimators/blob/main/functions.R?raw=TRUE")
-#source("IPW_functions.R")
-#source("gcomp_dr_v2.R") #Ting-Fang removed warnings for bootstrap
 
 # Source required R scripts directly from GitHub
-# source("https://raw.githubusercontent.com/uri-ncipher/Causal-Inference-and-Networks-Short-Course/refs/heads/main/Code/IPW_functions.R")
-source("https://raw.githubusercontent.com/uri-ncipher/Causal-Inference-and-Networks-Short-Course/refs/heads/main/Code/gcomp_dr_v2.R")
+source("https://raw.githubusercontent.com/uri-ncipher/ASA-JSM-Causal-Inference-in-Networks-Short-Course-2026/refs/heads/main/code/IPW_functions.R")
+source("https://raw.githubusercontent.com/uri-ncipher/ASA-JSM-Causal-Inference-in-Networks-Short-Course-2026/refs/heads/main/code/gcomp_dr_v2.R")
 
-### load local IPW_functions.R in order to adding cut to IPW1 propensity score
-source("./IPW_functions.R")
 ```
 
 ### Data Preparation
@@ -67,13 +68,16 @@ Read in the synthetic nodes and edges data sets for creating the simulated netwo
 # 2. Data Preparation
 # -----------------------------
 
-nodes <- read.csv("https://raw.githubusercontent.com/uri-ncipher/Causal-Inference-and-Networks-Short-Course/refs/heads/main/Data/TRIPsim_nodes.csv")
-edges <- read.csv("https://raw.githubusercontent.com/uri-ncipher/Causal-Inference-and-Networks-Short-Course/refs/heads/main/Data/TRIPsim_edges.csv")
+nodes <- read.csv(
+  "https://raw.githubusercontent.com/uri-ncipher/Causal-Inference-and-Networks-Short-Course/refs/heads/main/Data/TRIPsim_nodes.csv")
+edges <- read.csv(
+  "https://raw.githubusercontent.com/uri-ncipher/Causal-Inference-and-Networks-Short-Course/refs/heads/main/Data/TRIPsim_edges.csv")
 
 head(nodes)
 head(edges)
 
-net0=graph_from_data_frame(d=edges, vertices = nodes, directed=F)  # create network based on the nodes and edges data.
+# create network based on the nodes and edges data
+net0=graph_from_data_frame(d=edges, vertices = nodes, directed=F)  
 ```
 
 ### Network visualization
@@ -85,7 +89,8 @@ net0=graph_from_data_frame(d=edges, vertices = nodes, directed=F)  # create netw
 # -----------------------------
 
 # plot the network generated above
-plot(net0, vertex.size=1, vertex.label=NA, vertex.color="cadetblue3", vertex.frame.color="cadetblue3")
+plot(net0, vertex.size=1, vertex.label=NA, vertex.color="cadetblue3", 
+     vertex.frame.color="cadetblue3")
 ```
 
 ### Prepare the data for modeling
@@ -101,8 +106,8 @@ n=length(V(net0))       # number of individuals
 m=components(net0)$no   # number of components
 
 # generate a dataset with three columns, the first column is participant id (node id), 
-# the second column is number of nearest neighbors for each participant (is also node degree), 
-# the third column indicate which component the participant is in.
+# the second column is number of nearest neighbors for each participant (is also 
+# node degree), the third column indicate which component the participant is in.
 df=data.frame(id=1:n, na=unlist(lapply(1:n, num_neighbors, net=net0)),
                 component=components(net0)$membership) 
 
@@ -112,7 +117,7 @@ df$outcome=nodes$outcome
 df$age=nodes$age
 df$age10=nodes$age/10 #age per 10 years
 df$agebin=ifelse(nodes$age>33,1,0) #age >33 years old
-table(df$treatment, df$agebin)
+#table(df$treatment, df$agebin)
 df$posneg=nodes$posneg
 df$date=nodes$date
 df$share=nodes$share
@@ -125,8 +130,10 @@ df$notna_a=df$na-df$na_a
 base_covariate=c("age10", "posneg", "date", "share", "education", "employment")
 
 # averaging baseline covariates (average of nearest neighbors' baseline covariate values)
-# Note: show code for averaging "age10" and "agebin" as examples. Average of other neighbor covariates already in dataset
-#       Example code: df$avg_var1=unlist(lapply(1:n, avg_neighbors, net=net0, variable="var1")) # "var1" can be any covariate name
+# Note: show code for averaging "age10" and "agebin" as examples. Average of 
+#       other neighbor covariates already in dataset
+#       Example code: df$avg_var1=unlist(lapply(1:n, avg_neighbors, net=net0, 
+#                           variable="var1")) # "var1" can be any covariate name
 df$avg_agebin=unlist(lapply(1:n, avg_neighbors, net=net0, variable="agebin"))
 df$avg_age10 =unlist(lapply(1:n, avg_neighbors, net=net0, variable="age10"))
 
@@ -136,7 +143,8 @@ df$avg_share = nodes$avg_share
 df$avg_education = nodes$avg_education
 df$avg_employment = nodes$avg_employment
 
-avg_covariate=c("avg_age10","avg_posneg", "avg_date", "avg_share", "avg_education","avg_employment")
+avg_covariate=c("avg_age10","avg_posneg", "avg_date", "avg_share", "avg_education",
+                "avg_employment")
 ```
 
 ## Modeling
@@ -145,24 +153,24 @@ In this section, we will apply both IPW1 and IPW2 estimators for the average pot
 
 Equations for calculating the four causal effects are:
 
-- ${\widehat{DE} = \widehat{Y}(1, \alpha) - \widehat{Y}(0, \alpha)}$
-- ${\widehat{IE} = \widehat{Y}(0, \alpha_0) - \widehat{Y}(0, \alpha_1)}$
-- ${\widehat{TE} = \widehat{Y}(1, \alpha_0) - \widehat{Y}(0, \alpha_1)}$
-- ${\widehat{OE} = \widehat{Y}(\alpha_0) - \widehat{Y}(\alpha_1)}$,
+-   ${\widehat{DE} = \widehat{Y}(1, \alpha) - \widehat{Y}(0, \alpha)}$
+-   ${\widehat{IE} = \widehat{Y}(0, \alpha_0) - \widehat{Y}(0, \alpha_1)}$
+-   ${\widehat{TE} = \widehat{Y}(1, \alpha_0) - \widehat{Y}(0, \alpha_1)}$
+-   ${\widehat{OE} = \widehat{Y}(\alpha_0) - \widehat{Y}(\alpha_1)}$,
 
 where $\alpha_0$, $\alpha_1$ both represents allocation strategies, and $\alpha_0 \neq  \alpha_1$ (Note: The associated [paper](https://arxiv.org/abs/2108.04865) compared the estimated average potential outcomes with $\alpha_1$ to $\alpha_0$ for the indirect, total, and overall effects. The code here compared the estimated average potential outcomes with $\alpha_0$ to $\alpha_1$ for the indirect, total, and overall effects). Users can set any values between 0 and 1 for $\alpha_0$ and $\alpha_1$. If given $\alpha$ is a vector, then the causal contrasts will produce pairwise comparisons in the sequential order of the values in $\alpha$. For example, if $\alpha = c(0.75, 0.25, 0.50)$, the contrasts for spillover effects will compare
 
-- 
+-   
 
-  (i) $\alpha_0 = 0.75$ versus $\alpha_1 = 0.25$;
+    (i) $\alpha_0 = 0.75$ versus $\alpha_1 = 0.25$;
 
-- 
+-   
 
-  (ii) $\alpha_0 = 0.75$ versus $\alpha_1 = 0.50$;
+    (ii) $\alpha_0 = 0.75$ versus $\alpha_1 = 0.50$;
 
-- 
+-   
 
-  (iii) $\alpha_0 = 0.25$ versus $\alpha_1 = 0.50$.
+    (iii) $\alpha_0 = 0.25$ versus $\alpha_1 = 0.50$.
 
 ### IPW1
 
@@ -177,7 +185,8 @@ Using IPW1 to estimate the average potential outcomes and causal effects under a
 alpha=c(0.5, 0.4, 0.3, 0.2)  # set allocation strategies
 
 base_covariate=c("agebin", "posneg", "date", "share", "education", "employment")
-avg_covariate=c("avg_agebin","avg_posneg", "avg_date", "avg_share", "avg_education","avg_employment")
+avg_covariate=c("avg_agebin","avg_posneg", "avg_date", "avg_share", "avg_education",
+                "avg_employment")
 #Note: Age variable continuous removed due to convergence issue, used binary for now
 
 IPW1 <- IPW_1_model(df, base_covariate, alpha)
@@ -186,53 +195,8 @@ IPW1
 
 In the output above,
 
-- The **section [[1]]** displays the point estimates (type = "point estimate" in the output) and estimated variances (type = "variance" in the output) for the average potential outcomes under three different allocation strategies (i.e., $\alpha = 0.25, 0.50, 0.75$) and each individual exposure ($a = 0, a=1$, and margin). "Margin" is the average potential outcomes for a particular allocation strategy, regardless of individual exposure status.
-- The **section [[2]]** displays the point estimates (type = "Direct", "Indirect", "Total", "Overall" in the output) and estimated variances (type = "Var DE", "Var IE", "Var TE", "Var OE" in the output) of four causal effects: direct, indirect, total and overall effects, corresponding to particular allocation strategies $(\alpha_0$ and $\alpha_1)$. The estimated values are shown in "estimation" column in the output above.
-
-
-Goodness of Fit test for random effect in mixed effect model.
-```{r}
-### install glmerGOF package (github link: https://github.com/BarkleyBG/glmerGOF)
-# remotes::install_github("BarkleyBG/glmerGOF")
-
-library(glmerGOF)
-library(survival)
-library(cubature) # testGOF() function requires this package
-
-
-### Fit a lme4::glmer() model (mixed effect model)
-formula_glmer <- as.formula(paste("treatment ~", paste(base_covariate, collapse = "+"), "+ (1 | component)"))
-formula_glmer
-fit_glmer <- glmer(formula_glmer, data=df, family=binomial(link="logit"))
-
-
-### Fit a survival::clogit() model
-formula_clogit <- as.formula(paste("treatment ~", paste(base_covariate, collapse = "+"), "+ strata(component)"))
-formula_clogit
-fit_clogit <- survival::clogit(formula_clogit, data=df, method="exact")
-
-variable_names <- list(DV="treatment", grouping="component")
-
-TC_test <- testGOF(data=df, 
-                   fitted_model_clogit = fit_clogit,
-                   fitted_model_glmm = fit_glmer,
-                   var_names = variable_names,
-                   gradient_derivative_method = "simple"
-                   )
-TC_test$results
-
-
-# ### Shapiro-Wilk normality test
-# re <- ranef(fit_glmer)
-# re_values <- re$component[["(Intercept)"]]
-# shapiro.test(re_values)
-# 
-# ### Lilliefors (Kolmogorov-Smirnov) test for normality
-# library(nortest)
-# nortest::lillie.test(re_values)
-
-
-```
+-   The **section [[1]]** displays the point estimates (type = "point estimate" in the output) and estimated variances (type = "variance" in the output) for the average potential outcomes under three different allocation strategies (i.e., $\alpha = 0.25, 0.50, 0.75$) and each individual exposure ($a = 0, a=1$, and margin). "Margin" is the average potential outcomes for a particular allocation strategy, regardless of individual exposure status.
+-   The **section [[2]]** displays the point estimates (type = "Direct", "Indirect", "Total", "Overall" in the output) and estimated variances (type = "Var DE", "Var IE", "Var TE", "Var OE" in the output) of four causal effects: direct, indirect, total and overall effects, corresponding to particular allocation strategies $(\alpha_0$ and $\alpha_1)$. The estimated values are shown in "estimation" column in the output above.
 
 ### IPW2
 
@@ -245,7 +209,8 @@ Using IPW2 to estimate the average potential outcomes and causal effects under a
 # -----------------------------
 #change back to age per 10 year increase
 base_covariate=c("age10", "posneg", "date", "share", "education", "employment")
-avg_covariate=c("avg_age10","avg_posneg", "avg_date", "avg_share", "avg_education","avg_employment")
+avg_covariate=c("avg_age10","avg_posneg", "avg_date", "avg_share", "avg_education",
+                "avg_employment")
 
 alpha=c(0.5, 0.4, 0.3, 0.2)  # set allocation strategies
 
@@ -262,8 +227,8 @@ IPW2
 
 In the output above,
 
-- The **section [[1]]** displays the point estimates (type = "point estimate" in the output) and estimated variances (type = "variance" in the output) for the average potential outcomes under three different allocation strategies (i.e., $\alpha = 0.75, 0.50, 0.25$) and each individual exposure ($a = 0, a=1$, and margin). "Margin" is the average potential outcomes for a particular allocation strategy, regardless of individual exposure status.
-- The **section [[2]]** displays the point estimates (type = "Direct", "Indirect", "Total", "Overall" in the output) and estimated variances (type = "Var DE", "Var IE", "Var TE", "Var OE" in the output) of four causal effects: direct, indirect, total and overall effects, corresponding to particular allocation strategies $(\alpha_0$ and $\alpha_1)$. The estimated values are shown in "estimation" column in the output above.
+-   The **section [[1]]** displays the point estimates (type = "point estimate" in the output) and estimated variances (type = "variance" in the output) for the average potential outcomes under three different allocation strategies (i.e., $\alpha = 0.75, 0.50, 0.25$) and each individual exposure ($a = 0, a=1$, and margin). "Margin" is the average potential outcomes for a particular allocation strategy, regardless of individual exposure status.
+-   The **section [[2]]** displays the point estimates (type = "Direct", "Indirect", "Total", "Overall" in the output) and estimated variances (type = "Var DE", "Var IE", "Var TE", "Var OE" in the output) of four causal effects: direct, indirect, total and overall effects, corresponding to particular allocation strategies $(\alpha_0$ and $\alpha_1)$. The estimated values are shown in "estimation" column in the output above.
 
 Now, we provide example code for an outcome-model based approach, g-computation. We use assumptions similar to IPW2 regarding the covariates for confounding from an individual's contacts in the network. We obtain 95% confidence intervals using a bootstrap on each individual and the summary information for their contacts' exposures and covariates.
 
@@ -317,18 +282,89 @@ res_dr$results
 
 Lastly, we perform assessment of the propensity score in IPW2 in the presence of interference.
 
-```{r}
+### IPW1 Model Fit Checks
+
+```{r, fig.width=8, fig.height=10}
+
+#Goodness of Fit test for random effect in mixed effect model for IPW1.
+
+### install glmerGOF package (github link: https://github.com/BarkleyBG/glmerGOF)
+# remotes::install_github("BarkleyBG/glmerGOF")
+
+library(glmerGOF)
+library(survival)
+library(cubature) # testGOF() function requires this package
+
+
+# Construct neighborhood data
+nn_data <- data.frame()
+for (i in 1:n){
+  sub <- subset(df, df$id %in% neighborhood(net0, order=1, nodes = i)[[1]])
+  sub$group <- i
+  nn_data <- rbind(nn_data, sub)
+}
+nn_data[base_covariate] <- lapply(nn_data[base_covariate], as.numeric)
+nn_data$treatment <- as.numeric(nn_data$treatment)
+
+#IPW1 covariates
+base_covariate=c("agebin", "posneg", "date", "share", "education", "employment")
+avg_covariate=c("avg_agebin","avg_posneg", "avg_date", "avg_share", "avg_education",
+                "avg_employment")
+
+### Fit a lme4::glmer() model (mixed effect model)
+formula_glmer <- as.formula(paste("treatment ~", paste(
+  base_covariate, collapse = "+"), "+ (1 | group)"))
+formula_glmer
+fit_glmer <- glmer(formula_glmer, data=nn_data, family=binomial(link="logit"))
+
+
+### Fit a survival::clogit() model
+formula_clogit <- as.formula(paste("treatment ~", paste(
+  base_covariate, collapse = "+"), "+ strata(group)"))
+formula_clogit
+fit_clogit <- survival::clogit(formula_clogit, data=nn_data, method="exact")
+
+variable_names <- list(DV="treatment", grouping="group")
+
+TC_test <- testGOF(data=nn_data, 
+                   fitted_model_clogit = fit_clogit,
+                   fitted_model_glmm = fit_glmer,
+                   var_names = variable_names,
+                   gradient_derivative_method = "simple"
+                   )
+TC_test$results
+
+
+# ### Shapiro-Wilk normality test
+# re <- ranef(fit_glmer)
+# re_values <- re$group[["(Intercept)"]]
+# shapiro.test(re_values)
+# 
+# # ### Lilliefors (Kolmogorov-Smirnov) test for normality
+# library(nortest)
+# nortest::lillie.test(re_values)
+
+
+```
+
+### IPW2 Model Fit Checks
+
+```{r, fig.width=8, fig.height=10}
 
 # ----------------------------------------------------------
 # 5. Assessing the fit of the generalized propensity scores
 # ----------------------------------------------------------
 
-### Check covariate balance for generalized propensity score: Fit a model on each covariate, then include the individual exposure, group level exposure, and propensity scores, compare to a model with only the propensity scores
+### Check covariate balance for generalized propensity score: Fit a model on each 
+### covariate, then include the individual exposure, group level exposure, and 
+### propensity scores, compare to a model with only the propensity scores
 
 
-# IPW2 was fitted using "age10", so we check balance using "age10" (continuous covariate), not "agebin" (binary covariate)
+# IPW2 was fitted using "age10", so we check balance using "age10" (continuous 
+# covariate), not "agebin" (binary covariate)
 base_covariate=c("age10", "posneg", "date", "share", "education", "employment")
-avg_covariate=c("avg_age10","avg_posneg", "avg_date", "avg_share", "avg_education","avg_employment")
+avg_covariate=c("avg_age10","avg_posneg", "avg_date", "avg_share", "avg_education",
+                "avg_employment")
 
 ##### check propensity score balance for IPW2
 mat_1 = as.matrix(cbind(1, df[, row.names(coef(summary(M1)))[-1]])) # neighbors' treatment
@@ -357,8 +393,8 @@ for (i in 1:length(base_covariate)) {
   }
   res_temp <- lmtest::lrtest(model_reduced, model_full)
   
-  ipw2_balance <- rbind(ipw2_balance,
-                       c(f1, f2, round(res_temp$Chisq[2], 4), round(res_temp$`Pr(>Chisq)`[2], 4))
+  ipw2_balance <- rbind(ipw2_balance, c(f1, f2, round(res_temp$Chisq[2], 4), 
+                                        round(res_temp$`Pr(>Chisq)`[2], 4))
   )
 }
 
@@ -377,8 +413,8 @@ for (i in 1:length(avg_covariate)) {
   
   res_temp <- lmtest::lrtest(model_reduced, model_full)
   
-  ipw2_balance <- rbind(ipw2_balance,
-                       c(f1, f2, round(res_temp$Chisq[2], 4), round(res_temp$`Pr(>Chisq)`[2], 4))
+  ipw2_balance <- rbind(ipw2_balance, c(f1, f2, round(res_temp$Chisq[2], 4), 
+                                        round(res_temp$`Pr(>Chisq)`[2], 4))
   )
 }
 colnames(ipw2_balance) <- c("Reduced model", "Full model", "Chisq", "Pr(>Chisq)")
@@ -554,22 +590,26 @@ make_latex_effect_table <- function(results,
   start <- 1
 
   if (direct_n > 0) {
-    tab <- tab %>% pack_rows("Direct effects", start, start + direct_n - 1, italic = TRUE)
+    tab <- tab %>% pack_rows("Direct effects", start, start + direct_n - 1, 
+                             italic = TRUE)
     start <- start + direct_n
   }
 
   if (indirect_n > 0) {
-    tab <- tab %>% pack_rows("Indirect effects", start, start + indirect_n - 1, italic = TRUE)
+    tab <- tab %>% pack_rows("Indirect effects", start, start + indirect_n - 1, 
+                             italic = TRUE)
     start <- start + indirect_n
   }
 
   if (total_n > 0) {
-    tab <- tab %>% pack_rows("Total effects", start, start + total_n - 1, italic = TRUE)
+    tab <- tab %>% pack_rows("Total effects", start, start + total_n - 1, 
+                             italic = TRUE)
     start <- start + total_n
   }
 
   if (overall_n > 0) {
-    tab <- tab %>% pack_rows("Overall effects", start, start + overall_n - 1, italic = TRUE)
+    tab <- tab %>% pack_rows("Overall effects", start, start + overall_n - 1, 
+                             italic = TRUE)
   }
 
   tab
